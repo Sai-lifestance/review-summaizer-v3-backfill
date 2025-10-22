@@ -103,6 +103,7 @@ def load_summaries(start_date, end_date, wins, opps, review_count):
     
 if __name__ == "__main__":
     from app.utils import get_reviews
-    reviews = get_reviews("2025-10-01", "2025-10-01")
+    reviews = get_reviews("2025-09-01", "2025-09-01")
     generated_summary = generate_summaries(reviews, output_response=True)
+
     print(generated_summary)
