@@ -1,1 +1,3 @@
-web: functions-framework --target summarize_and_load --port 8080
+web: functions-framework --target=summarize_and_load --signature-type=http --port=$PORT
+
+
