@@ -1,0 +1,5 @@
+/tmp
+.pytest_cache
+Procfile
+__pycache__/
+app/__pycache__

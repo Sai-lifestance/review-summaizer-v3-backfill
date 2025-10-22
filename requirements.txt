@@ -1,0 +1,5 @@
+jsonify==0.5
+openai==2.3.0
+protobuf==6.32.1
+functions-framework==3.*
+google-cloud-bigquery
