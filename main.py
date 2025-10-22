@@ -68,6 +68,7 @@ if __name__ == "__main__":
     print(start_date)
     print(end_date)
 
-    reviews = get_reviews("2025-10-01", "2025-10-01")
+    reviews = get_reviews("2025-09-01", "2025-09-01")
     review_length = len(reviews)
+
     print(review_length)
