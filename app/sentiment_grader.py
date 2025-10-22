@@ -161,11 +161,12 @@ def load_sentiment_grades(start_date, end_date, graded_data):
         return True
 
 if __name__ == "__main__":
-    start_date = "2025-10-03"
-    end_date = "2025-10-09"
+    start_date = "2025-09-03"
+    end_date = "2025-09-09"
     reviews = get_reviews(start_date, end_date)
     print(f"Count of reviews: {len(reviews)}")
     graded_data = generate_sentiment_grade(reviews,output_response=True)
     print(graded_data)
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
+
     print(load_status)
