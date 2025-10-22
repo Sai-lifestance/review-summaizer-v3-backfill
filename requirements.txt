@@ -3,3 +3,5 @@ openai==2.3.0
 protobuf==6.32.1
 functions-framework==3.*
 google-cloud-bigquery
+pandas==2.2.3
+pyarrow>=15.0.0
