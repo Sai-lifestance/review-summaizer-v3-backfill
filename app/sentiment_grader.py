@@ -7,6 +7,10 @@ import logging
 import re
 from collections import defaultdict
 import json
+import logging
+from collections import defaultdict
+
+log = logging.getLogger("app.sentiment")
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -23,19 +27,44 @@ def count_category_mentions(reviews, category_keywords, text_key="review_comment
     Returns:
         dict: {category: mention_count}
     """
-    mention_counts = {}
-    for category, keywords in categories.items():
-        mention_counts[category] = 0
-        for review in reviews:
-            text = review.get("review_comment") if isinstance(review, dict) else review
-            # ✅ Small patch to handle None safely
-            for keyword in (k for k in keywords if k):   # skip None/empty
-                kw = str(keyword).lower()
-                if kw and kw in text:
-                    mention_counts[category] += 1
-                    break
-    return mention_counts
+   def count_category_mentions(reviews, categories, text_key="review_comment"):
+    log.info("[sentiment] start: reviews=%s categories=%s", len(reviews or []), len(categories or {}))
 
+    total_kw = sum(len(v or []) for v in categories.values())
+    empty_kw = sum(1 for v in categories.values() for k in (v or []) if not k)
+    if empty_kw:
+        log.info("[sentiment] keywords: total=%d empty=%d (first 5 affected categories: %s)",
+                 total_kw, empty_kw,
+                 [c for c, v in categories.items() if any(k in (None, "") for k in (v or []))][:5])
+
+    counts = defaultdict(int)
+    skipped = 0
+    bad_samples = []
+
+    for i, review in enumerate(reviews or []):
+        text = review.get(text_key) if isinstance(review, dict) else review
+        if not text:
+            skipped += 1
+            if len(bad_samples) < 5:
+                bad_samples.append({"idx": i, "type": type(review).__name__, "text": None})
+            continue
+
+        text = str(text).lower()
+
+        for cat, kws in categories.items():
+            if not kws:
+                continue
+            for kw in (k for k in kws if k):
+                kw_l = str(kw).lower()
+                if kw_l and kw_l in text:
+                    counts[cat] += 1
+                    break  # count once per category
+
+    if skipped:
+        log.info("[sentiment] skipped_reviews=%d (first few: %s)", skipped, bad_samples)
+
+    log.info("[sentiment] done: matched_categories=%d", len(counts))
+    return dict(counts)
 
 
 def generate_sentiment_grade(reviews,model=DEFAULT_MODEL,output_response=False):
@@ -47,7 +76,9 @@ def generate_sentiment_grade(reviews,model=DEFAULT_MODEL,output_response=False):
     categories = load_review_categories()
 
     # Count mentions
+    logger.info("Calling count_category_mentions...")
     mention_counts = count_category_mentions(reviews, categories)
+    logger.info("count_category_mentions completed. Categories matched: %s", list(mention_counts.keys())[:10])
     
     # Combine all reviews for prompt
     review_texts = "\n".join([f"- {r['review_comment']}" for r in reviews if r['review_comment']])
@@ -164,5 +195,6 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
 
