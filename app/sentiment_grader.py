@@ -27,7 +27,7 @@ def count_category_mentions(reviews, categories, text_key="review_comment"):
     Returns:
         dict: {category: mention_count}
     """
-   def count_category_mentions(reviews, categories, text_key="review_comment"):
+   
     log.info("[sentiment] start: reviews=%s categories=%s", len(reviews or []), len(categories or {}))
 
     total_kw = sum(len(v or []) for v in categories.values())
@@ -247,6 +247,7 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
 
 
