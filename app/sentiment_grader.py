@@ -67,91 +67,143 @@ def count_category_mentions(reviews, category_keywords, text_key="review_comment
     return dict(counts)
 
 
-def generate_sentiment_grade(reviews,model=DEFAULT_MODEL,output_response=False):
+def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False):
+    # ── early guards ───────────────────────────────────────────
+    total_reviews = len(reviews or [])
+    logger.info("[sentiment] enter generate_sentiment_grade: reviews=%d", total_reviews)
     if not reviews:
         logger.warning("No reviews found to grade sentiment.")
         return [{"error": "No new reviews."}]
-    
-    # Load categories
-    categories = load_review_categories()
 
-    # Count mentions
-    logger.info("Calling count_category_mentions...")
-    mention_counts = count_category_mentions(reviews, categories)
-    logger.info("count_category_mentions completed. Categories matched: %s", list(mention_counts.keys())[:10])
-    
-    # Combine all reviews for prompt
-    review_texts = "\n".join([f"- {r['review_comment']}" for r in reviews if r['review_comment']])
+    # ── load categories ────────────────────────────────────────
+    try:
+        categories = load_review_categories()  # expects dict[str, list[str]]
+        total_kw = sum(len(v or []) for v in categories.values())
+        empty_kw = sum(1 for v in categories.values() for k in (v or []) if not k)
+        logger.info("[sentiment] loaded categories=%d total_keywords=%d empty_keywords=%d keys_sample=%s",
+                    len(categories), total_kw, empty_kw, list(categories.keys())[:10])
+    except Exception as e:
+        logger.exception("[sentiment] failed to load categories: %s", e)
+        return [{"error": f"Failed loading categories: {e}"}]
 
-    # Format categories for prompt
+    # ── count mentions (safe) ──────────────────────────────────
+    try:
+        logger.info("Calling count_category_mentions...")
+        mention_counts = count_category_mentions(reviews, categories, text_key="review_comment")
+        logger.info("count_category_mentions completed. Categories matched: %s",
+                    list(mention_counts.keys())[:10])
+    except Exception as e:
+        logger.exception("[sentiment] count_category_mentions crashed: %s", e)
+        return [{"error": f"Counter failed: {e}"}]
+
+    # ── build prompt safely ────────────────────────────────────
+    def _safe_str(v):
+        if v is None:
+            return ""
+        return v if isinstance(v, str) else str(v)
+
+    # extract review text safely, skip empties, trim each line to keep tokens sane
+    LINES_LIMIT = 300          # cap lines included in the prompt
+    LINE_TRIM = 500            # trim very long reviews
+    review_texts_list = []
+    skipped = 0
+    for r in reviews:
+        txt = r.get("review_comment") if isinstance(r, dict) else r
+        if not txt:
+            skipped += 1
+            continue
+        s = _safe_str(txt)
+        if len(s) > LINE_TRIM:
+            s = s[:LINE_TRIM] + "...[truncated]"
+        review_texts_list.append(f"- {s}")
+        if len(review_texts_list) >= LINES_LIMIT:
+            break
+    if skipped:
+        logger.info("[sentiment] skipped %d reviews with empty text while building prompt", skipped)
+    logger.info("[sentiment] prompt will include %d/%d reviews (limit=%d, trim=%d chars)",
+                len(review_texts_list), total_reviews, LINES_LIMIT, LINE_TRIM)
+
+    review_texts = "\n".join(review_texts_list)
+
+    # format categories (skip empty keywords)
     categories_text = "\n".join(
-        [f"- {cat}: {', '.join(kw_list)}" for cat, kw_list in categories.items()]
+        f"- {cat}: {', '.join([_safe_str(k) for k in (kw_list or []) if k])}"
+        for cat, kw_list in categories.items()
     )
-    
+
     prompt = f"""
-    You are a sentiment analysis expert. Analyze the following Google reviews and assign each review category a letter grade (A-F) (Plus and Minuses can be added too.) based on sentiment.
+You are a sentiment analysis expert. Analyze the following Google reviews and assign each review category a letter grade (A–F). Plus/minus grades are allowed.
 
-    Review categories and their keywords:
-    {categories_text}
+Review categories and their keywords:
+{categories_text}
 
-    Reviews:
-    {review_texts}
+Reviews:
+{review_texts}
 
-    Respond in valid JSON format like this:
-    [
-        {{"category": "Billing", "grade": "A"}},
-        {{"category": "Clinical Care and Outcomes", "grade": "B-"}}
-    ]
+Respond in valid JSON format like this:
+[
+  {{"category": "Billing", "grade": "A"}},
+  {{"category": "Clinical Care and Outcomes", "grade": "B-"}}
+]
 
-    Grading scale:
-    A = overwhelmingly positive
-    B = mostly positive
-    C = neutral/mixed
-    D = mostly negative
-    F = overwhelmingly negative
-    """
+Grading scale:
+A = overwhelmingly positive
+B = mostly positive
+C = neutral/mixed
+D = mostly negative
+F = overwhelmingly negative
+""".strip()
 
-    # Get response from AI
+    # ── call OpenAI ────────────────────────────────────────────
     content = None
     try:
-        logger.info("Sending prompt to OpenAI...")
-        response = openai_client.chat.completions.create(
+        logger.info("Sending prompt to OpenAI... (model=%s, chars=%d)", model, len(prompt))
+        resp = openai_client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "You are a structured sentiment analysis assistant."},
-                {"role": "user", "content": prompt}
-            ]
+                {"role": "user", "content": prompt},
+            ],
         )
-        logger.info("Waiting for response from OpenAI...")
-
-        content = response.choices[0].message.content.strip()
-        logger.info("Model response received for sentiment grading.")
-
+        content = (resp.choices[0].message.content or "").strip()
+        logger.info("Model response received for sentiment grading. len=%d", len(content))
     except Exception as e:
         logger.exception("Error generating sentiment grades via OpenAI")
-        return [{"error": str(e)}]
-    
-    # Merge counts with AI output
+        return [{"error": f"OpenAI call failed: {e}"}]
+
+    # ── merge counts with AI output ────────────────────────────
     try:
         graded_data = json.loads(content)
-        logger.info("Merging mention counts with AI output...")
+        if not isinstance(graded_data, list):
+            raise ValueError("Model JSON is not a list")
+
+        # make category lookup case-insensitive
+        mention_lower = {str(k).lower(): v for k, v in (mention_counts or {}).items()}
         for entry in graded_data:
-            cat = entry["category"]
-            entry["mentions"] = mention_counts.get(cat, 0)
+            cat = _safe_str(entry.get("category"))
+            entry["mentions"] = mention_lower.get(cat.lower(), 0)
+
+        logger.info("Merged mention counts with AI output. rows=%d", len(graded_data))
     except Exception as e:
-        logger.warning(f"Error merging mentions or parsing model output: {e}")
+        logger.warning("Error merging mentions or parsing model output: %s", e)
+        # Return raw content and counts so you can inspect in logs/UI
         return [{"raw_response": content, "mention_counts": mention_counts}]
-    
+
+    # ── optional file output ───────────────────────────────────
     if output_response:
         try:
             file_path = "tmp/graded_sentiment.txt"
+            import os
+            os.makedirs("tmp", exist_ok=True)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(json.dumps(graded_data, indent=2))
-            logger.info(f"Successfully wrote to {file_path}")
+            logger.info("Successfully wrote graded sentiment to %s", file_path)
         except Exception as e:
-            print("Error occurred:", e)
+            logger.warning("Failed writing graded sentiment file: %s", e)
 
+    logger.info("[sentiment] leave generate_sentiment_grade: rows=%d", len(graded_data))
     return graded_data
+
 
 def load_sentiment_grades(start_date, end_date, graded_data):
     table_id = f"{BQ_PROJECT_SUMMARIES}.{SENTIMENT_GRADE_TABLE}"
@@ -195,6 +247,7 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
 
 
