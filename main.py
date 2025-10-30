@@ -3,7 +3,7 @@ import logging
 from flask import Flask, request, jsonify
 from app.utils import last_complete_fri_to_thu, get_reviews
 from app.summarizer import generate_summaries, load_summaries
-from app.sentiment_grader import count_category_mentions
+
 
 
 # ---- Configuration ----
@@ -39,8 +39,7 @@ def summarize_and_load(request):
         logging.info("Fetched %d reviews", review_length)
 
         wins, opps = generate_summaries(reviews)
-        sentiment_counts = count_category_mentions(reviews)
-        logger.info(f"Sentiment counts: {sentiment_counts}")
+        
         success = load_summaries(start_date, end_date, wins, opps, review_length)
 
         if success:
@@ -75,4 +74,5 @@ if __name__ == "__main__":
     review_length = len(reviews)
 
     print(review_length)
+
 
