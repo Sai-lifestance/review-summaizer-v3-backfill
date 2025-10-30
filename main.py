@@ -1,14 +1,15 @@
 import json
 import logging
-
+import logging
 from flask import Request 
 from app.utils import last_complete_fri_to_thu, get_reviews
 from app.summarizer import generate_summaries, load_summaries
 from app.sentiment_grader import generate_sentiment_grade, load_sentiment_grades
-
-# ---- Configuration ----
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
+logger = logging.getLogger("app")
 
 def summarize_and_load(request: Request):
     """
@@ -83,4 +84,5 @@ if __name__ == "__main__":
     print(f"Sentiment load status: {sentiment_status}")
 
     print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
