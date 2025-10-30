@@ -23,24 +23,20 @@ def count_category_mentions(reviews, category_keywords, text_key="review_comment
     Returns:
         dict: {category: mention_count}
     """
-    category_counts = defaultdict(int)
-
-    # Normalize keywords to lowercase and compile regex patterns
-    keyword_patterns = {
-        cat: [re.compile(rf"\b{re.escape(kw.lower())}\b") for kw in kws]
-        for cat, kws in category_keywords.items()
-    }
-
-    for review in reviews:
-        text = review[text_key] if isinstance(review, dict) else review
-        text = text.lower()
-        
-        for category, patterns in keyword_patterns.items():
-            # Check if any keyword matches
-            if any(p.search(text) for p in patterns):
-                category_counts[category] += 1
-
-    return dict(category_counts)
+    mention_counts = {}
+    for category, keywords in categories.items():
+        mention_counts[category] = 0
+        for review in reviews:
+            text = review.get("review_comment") if isinstance(review, dict) else review
+            # ✅ Small patch to handle None safely
+            if not text:
+                continue
+            text = str(text).lower()
+            for keyword in keywords:
+                if keyword.lower() in text:
+                    mention_counts[category] += 1
+                    break
+    return mention_counts
 
 
 
@@ -170,3 +166,4 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
