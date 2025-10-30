@@ -104,10 +104,10 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
         return v if isinstance(v, str) else str(v)
 
     # extract review text safely, skip empties, trim each line to keep tokens sane
-    LINES_LIMIT = 300          # cap lines included in the prompt
-    LINE_TRIM = 500            # trim very long reviews
+    LINE_TRIM = 1000  # still trim overly long individual reviews
     review_texts_list = []
     skipped = 0
+
     for r in reviews:
         txt = r.get("review_comment") if isinstance(r, dict) else r
         if not txt:
@@ -117,12 +117,12 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
         if len(s) > LINE_TRIM:
             s = s[:LINE_TRIM] + "...[truncated]"
         review_texts_list.append(f"- {s}")
-        if len(review_texts_list) >= LINES_LIMIT:
-            break
+
     if skipped:
         logger.info("[sentiment] skipped %d reviews with empty text while building prompt", skipped)
-    logger.info("[sentiment] prompt will include %d/%d reviews (limit=%d, trim=%d chars)",
-                len(review_texts_list), total_reviews, LINES_LIMIT, LINE_TRIM)
+
+logger.info("[sentiment] prompt will include all %d reviews (trim=%d chars per line)",
+            len(review_texts_list), LINE_TRIM)
 
     review_texts = "\n".join(review_texts_list)
 
@@ -248,6 +248,7 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
 
 
