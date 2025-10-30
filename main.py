@@ -1,78 +1,85 @@
 import json
 import logging
-from flask import Flask, request, jsonify
+
+from flask import Request  # <- optional; remove if not using type hints
 from app.utils import last_complete_fri_to_thu, get_reviews
 from app.summarizer import generate_summaries, load_summaries
-
-
+from app.sentiment_grader import generate_sentiment_grade, load_sentiment_grades
 
 # ---- Configuration ----
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
+logger = logging.getLogger(__name__)
 
-# @app.route("/summarize-and-load", methods=["POST"])
-def summarize_and_load(request):
+def summarize_and_load(request: Request):
     """
-    A Function that:
-        - Gets last complete Fri–Thu range
-        - Fetches reviews
-        - Generates wins/opps summaries
-        - Inserts them into BigQuery
-
-    Returns:
-        - A Dictionary of metadata:
-            - date_range: date range of reviews summarized
-            - review_count
-            - wins_summary
-            - opps_summary
-            - status: "inserted" if succeeded, "failed" if error
-        - Response Code
-        - Content-Type
+    Cloud Function entrypoint:
+      - Gets last complete Fri–Thu range
+      - Fetches reviews
+      - Generates wins/opps summaries + sentiment grades
+      - Inserts them into BigQuery
     """
     try:
         start_date, end_date = last_complete_fri_to_thu()
-        logging.info("Processing reviews from %s to %s", start_date, end_date)
+        logger.info("Processing reviews from %s to %s", start_date, end_date)
 
         reviews = get_reviews(start_date, end_date)
         review_length = len(reviews)
-        logging.info("Fetched %d reviews", review_length)
+        logger.info("Fetched %d reviews", review_length)
 
+        # Summarizer
         wins, opps = generate_summaries(reviews)
-        
-        success = load_summaries(start_date, end_date, wins, opps, review_length)
 
-        if success:
-            logging.info("Summaries inserted successfully.")
+        # Sentiment grader
+        logger.info("Running sentiment grader for the same review batch...")
+        graded_data = generate_sentiment_grade(reviews, output_response=True)
+        sentiment_ok = load_sentiment_grades(start_date, end_date, graded_data)
+        if sentiment_ok:
+            logger.info("Sentiment grades inserted successfully.")
         else:
-            logging.warning("Summaries failed to insert.")
+            logger.warning("Sentiment grades failed to insert.")
 
-        return (json.dumps({
+        # Store summaries
+        summary_ok = load_summaries(start_date, end_date, wins, opps, review_length)
+        if summary_ok:
+            logger.info("Summaries inserted successfully.")
+        else:
+            logger.warning("Summaries failed to insert.")
+
+        body = {
             "date_range": f"{start_date} to {end_date}",
             "review_count": review_length,
             "wins_summary": wins,
             "opps_summary": opps,
-            "status": "inserted" if success else "failed"
-        }), 200, {"Content-Type": "application/json"})
-    
-    except Exception as e:
-        logging.exception("Unhandled error: ")
-        return json.dumps({
-            "error": str(e),
-            "status": "failed"
-        }), 500
-    
+            "summary_status": "inserted" if summary_ok else "failed",
+            "sentiment_status": "inserted" if sentiment_ok else "failed",
+        }
+        return json.dumps(body), 200, {"Content-Type": "application/json"}
 
+    except Exception as e:
+        logger.exception("Unhandled error")
+        return json.dumps({"error": str(e), "status": "failed"}), 500, {
+            "Content-Type": "application/json"
+        }
 
 if __name__ == "__main__":
-
+    # Local test run (no HTTP)
     start_date, end_date = last_complete_fri_to_thu()
-    print(start_date)
-    print(end_date)
+    print(f"Processing week: {start_date} → {end_date}")
 
-    reviews = get_reviews("2025-09-01", "2025-09-01")
+    reviews = get_reviews(start_date, end_date)
     review_length = len(reviews)
+    print(f"Fetched {review_length} reviews")
 
-    print(review_length)
+    # Summarizer
+    print("\nRunning summarizer...")
+    wins, opps = generate_summaries(reviews)
+    summary_status = load_summaries(start_date, end_date, wins, opps, review_length)
+    print(f"Summary load status: {summary_status}")
 
+    # Sentiment grader
+    print("\nRunning sentiment grader...")
+    graded_data = generate_sentiment_grade(reviews, output_response=True)
+    sentiment_status = load_sentiment_grades(start_date, end_date, graded_data)
+    print(f"Sentiment load status: {sentiment_status}")
 
+    print("\n✅ Completed summarizer + sentiment grader flow.")
