@@ -15,7 +15,7 @@ log = logging.getLogger("app.sentiment")
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-def count_category_mentions(reviews, category_keywords, text_key="review_comment"):
+def count_category_mentions(reviews, categories, text_key="review_comment"):
     """
     Counts how many reviews mention each category at least once based on its keyword list.
 
@@ -247,6 +247,7 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
 
 
