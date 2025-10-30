@@ -20,15 +20,17 @@ def count_category_mentions(reviews, categories, text_key="review_comment"):
     Counts how many reviews mention each category at least once based on its keyword list.
 
     Args:
-        reviews (list): List of review texts or dicts (e.g., [{"review_comment": "..."}]).
-        category_keywords (dict): Dict mapping category -> list of keywords.
+        reviews (list): Each item is a dict (expects review text in `text_key`) or a raw string.
+        categories (dict[str, list[str]]): category -> list of keywords.
         text_key (str): If reviews are dicts, which key contains the review text.
 
     Returns:
-        dict: {category: mention_count}
+        dict[str, int]: {category: mention_count}
     """
-   
-    log.info("[sentiment] start: reviews=%s categories=%s", len(reviews or []), len(categories or {}))
+    categories = categories or {}
+    reviews = reviews or []
+
+    log.info("[sentiment] start: reviews=%s categories=%s", len(reviews), len(categories))
 
     total_kw = sum(len(v or []) for v in categories.values())
     empty_kw = sum(1 for v in categories.values() for k in (v or []) if not k)
@@ -41,7 +43,7 @@ def count_category_mentions(reviews, categories, text_key="review_comment"):
     skipped = 0
     bad_samples = []
 
-    for i, review in enumerate(reviews or []):
+    for i, review in enumerate(reviews):
         text = review.get(text_key) if isinstance(review, dict) else review
         if not text:
             skipped += 1
@@ -54,7 +56,7 @@ def count_category_mentions(reviews, categories, text_key="review_comment"):
         for cat, kws in categories.items():
             if not kws:
                 continue
-            for kw in (k for k in kws if k):
+            for kw in (k for k in kws if k):  # skip None/empty
                 kw_l = str(kw).lower()
                 if kw_l and kw_l in text:
                     counts[cat] += 1
@@ -65,7 +67,6 @@ def count_category_mentions(reviews, categories, text_key="review_comment"):
 
     log.info("[sentiment] done: matched_categories=%d", len(counts))
     return dict(counts)
-
 
 def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False):
     # ── early guards ───────────────────────────────────────────
@@ -247,6 +248,7 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
 
 
