@@ -29,11 +29,9 @@ def count_category_mentions(reviews, category_keywords, text_key="review_comment
         for review in reviews:
             text = review.get("review_comment") if isinstance(review, dict) else review
             # ✅ Small patch to handle None safely
-            if not text:
-                continue
-            text = str(text).lower()
-            for keyword in keywords:
-                if keyword.lower() in text:
+            for keyword in (k for k in keywords if k):   # skip None/empty
+                kw = str(keyword).lower()
+                if kw and kw in text:
                     mention_counts[category] += 1
                     break
     return mention_counts
@@ -166,4 +164,5 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
