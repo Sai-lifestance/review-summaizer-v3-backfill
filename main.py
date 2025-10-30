@@ -1,7 +1,7 @@
 import json
 import logging
 
-from flask import Request  # <- optional; remove if not using type hints
+from flask import Request 
 from app.utils import last_complete_fri_to_thu, get_reviews
 from app.summarizer import generate_summaries, load_summaries
 from app.sentiment_grader import generate_sentiment_grade, load_sentiment_grades
@@ -83,3 +83,4 @@ if __name__ == "__main__":
     print(f"Sentiment load status: {sentiment_status}")
 
     print("\n✅ Completed summarizer + sentiment grader flow.")
+
