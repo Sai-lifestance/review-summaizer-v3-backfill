@@ -1,43 +1,39 @@
 import datetime
-import pandas as pd
-from app.clients import openai_client, bq_client
-from app.config import BQ_PROJECT_SUMMARIES, DEFAULT_MODEL, SENTIMENT_GRADE_TABLE
-from app.utils import load_review_categories, get_reviews
-import logging
-import re
-from collections import defaultdict
 import json
 import logging
 from collections import defaultdict
 
-log = logging.getLogger("app.sentiment")
+import pandas as pd
+
+from app.clients import openai_client, bq_client
+from app.config import BQ_PROJECT_SUMMARIES, DEFAULT_MODEL, SENTIMENT_GRADE_TABLE
+from app.utils import load_review_categories, get_reviews
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
 def count_category_mentions(reviews, categories, text_key="review_comment"):
     """
     Counts how many reviews mention each category at least once based on its keyword list.
-
-    Args:
-        reviews (list): Each item is a dict (expects review text in `text_key`) or a raw string.
-        categories (dict[str, list[str]]): category -> list of keywords.
-        text_key (str): If reviews are dicts, which key contains the review text.
-
-    Returns:
-        dict[str, int]: {category: mention_count}
+    reviews: list[dict|str]
+    categories: dict[str, list[str]]
+    returns: dict[str, int]
     """
     categories = categories or {}
     reviews = reviews or []
 
-    log.info("[sentiment] start: reviews=%s categories=%s", len(reviews), len(categories))
+    logger.info("[sentiment] start: reviews=%s categories=%s", len(reviews), len(categories))
 
     total_kw = sum(len(v or []) for v in categories.values())
     empty_kw = sum(1 for v in categories.values() for k in (v or []) if not k)
     if empty_kw:
-        log.info("[sentiment] keywords: total=%d empty=%d (first 5 affected categories: %s)",
-                 total_kw, empty_kw,
-                 [c for c, v in categories.items() if any(k in (None, "") for k in (v or []))][:5])
+        logger.info(
+            "[sentiment] keywords: total=%d empty=%d (first 5 affected categories: %s)",
+            total_kw,
+            empty_kw,
+            [c for c, v in categories.items() if any(k in (None, "") for k in (v or []))][:5],
+        )
 
     counts = defaultdict(int)
     skipped = 0
@@ -63,10 +59,11 @@ def count_category_mentions(reviews, categories, text_key="review_comment"):
                     break  # count once per category
 
     if skipped:
-        log.info("[sentiment] skipped_reviews=%d (first few: %s)", skipped, bad_samples)
+        logger.info("[sentiment] skipped_reviews=%d (first few: %s)", skipped, bad_samples)
 
-    log.info("[sentiment] done: matched_categories=%d", len(counts))
+    logger.info("[sentiment] done: matched_categories=%d", len(counts))
     return dict(counts)
+
 
 def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False):
     # ── early guards ───────────────────────────────────────────
@@ -81,8 +78,13 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
         categories = load_review_categories()  # expects dict[str, list[str]]
         total_kw = sum(len(v or []) for v in categories.values())
         empty_kw = sum(1 for v in categories.values() for k in (v or []) if not k)
-        logger.info("[sentiment] loaded categories=%d total_keywords=%d empty_keywords=%d keys_sample=%s",
-                    len(categories), total_kw, empty_kw, list(categories.keys())[:10])
+        logger.info(
+            "[sentiment] loaded categories=%d total_keywords=%d empty_keywords=%d keys_sample=%s",
+            len(categories),
+            total_kw,
+            empty_kw,
+            list(categories.keys())[:10],
+        )
     except Exception as e:
         logger.exception("[sentiment] failed to load categories: %s", e)
         return [{"error": f"Failed loading categories: {e}"}]
@@ -91,8 +93,10 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
     try:
         logger.info("Calling count_category_mentions...")
         mention_counts = count_category_mentions(reviews, categories, text_key="review_comment")
-        logger.info("count_category_mentions completed. Categories matched: %s",
-                    list(mention_counts.keys())[:10])
+        logger.info(
+            "count_category_mentions completed. Categories matched: %s",
+            list(mention_counts.keys())[:10],
+        )
     except Exception as e:
         logger.exception("[sentiment] count_category_mentions crashed: %s", e)
         return [{"error": f"Counter failed: {e}"}]
@@ -103,8 +107,7 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
             return ""
         return v if isinstance(v, str) else str(v)
 
-    # extract review text safely, skip empties, trim each line to keep tokens sane
-    LINE_TRIM = 10000  # still trim overly long individual reviews
+    LINE_TRIM = 10000  # trim overly long individual reviews
     review_texts_list = []
     skipped = 0
 
@@ -119,10 +122,16 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
         review_texts_list.append(f"- {s}")
 
     if skipped:
-        logger.info("[sentiment] skipped %d reviews with empty text while building prompt", skipped)
+        logger.info(
+            "[sentiment] skipped %d reviews with empty text while building prompt", skipped
+        )
 
-logger.info("[sentiment] prompt will include all %d reviews (trim=%d chars per line)",
-            len(review_texts_list), LINE_TRIM)
+    # ✅ this line must be indented inside the function
+    logger.info(
+        "[sentiment] prompt will include all %d reviews (trim=%d chars per line)",
+        len(review_texts_list),
+        LINE_TRIM,
+    )
 
     review_texts = "\n".join(review_texts_list)
 
@@ -178,7 +187,6 @@ F = overwhelmingly negative
         if not isinstance(graded_data, list):
             raise ValueError("Model JSON is not a list")
 
-        # make category lookup case-insensitive
         mention_lower = {str(k).lower(): v for k, v in (mention_counts or {}).items()}
         for entry in graded_data:
             cat = _safe_str(entry.get("category"))
@@ -187,18 +195,17 @@ F = overwhelmingly negative
         logger.info("Merged mention counts with AI output. rows=%d", len(graded_data))
     except Exception as e:
         logger.warning("Error merging mentions or parsing model output: %s", e)
-        # Return raw content and counts so you can inspect in logs/UI
         return [{"raw_response": content, "mention_counts": mention_counts}]
 
     # ── optional file output ───────────────────────────────────
     if output_response:
         try:
-            file_path = "tmp/graded_sentiment.txt"
             import os
+
             os.makedirs("tmp", exist_ok=True)
-            with open(file_path, "w", encoding="utf-8") as f:
+            with open("tmp/graded_sentiment.txt", "w", encoding="utf-8") as f:
                 f.write(json.dumps(graded_data, indent=2))
-            logger.info("Successfully wrote graded sentiment to %s", file_path)
+            logger.info("Successfully wrote graded sentiment to tmp/graded_sentiment.txt")
         except Exception as e:
             logger.warning("Failed writing graded sentiment file: %s", e)
 
@@ -208,52 +215,44 @@ F = overwhelmingly negative
 
 def load_sentiment_grades(start_date, end_date, graded_data):
     table_id = f"{BQ_PROJECT_SUMMARIES}.{SENTIMENT_GRADE_TABLE}"
-
-    logger.info(f"Loading sentiment grades into {table_id}...")
+    logger.info("Loading sentiment grades into %s...", table_id)
 
     rows_to_insert = []
-    iso_now = datetime.datetime.now().isoformat()
-    for entry in graded_data:
-        if "category" not in entry:
+    iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    for entry in graded_data or []:
+        category = entry.get("category")
+        if not category:
             continue
-
-        rows_to_insert.append({
-            "week_start": start_date,
-            "week_end": end_date,
-            "review_category": entry["category"],
-            "sentiment_grade": entry.get("grade", None), 
-            "count_of_mentions": entry.get("mentions", 0),
-            "insert_timestamp_utc": iso_now
-        })
+        rows_to_insert.append(
+            {
+                "week_start": start_date,
+                "week_end": end_date,
+                "review_category": category,
+                "sentiment_grade": entry.get("grade"),
+                "count_of_mentions": entry.get("mentions", 0),
+                "insert_timestamp_utc": iso_now,
+            }
+        )
 
     if not rows_to_insert:
-        logger.warning(f"No valid rows to insert into BigQuery table {table_id}")
+        logger.warning("No valid rows to insert into BigQuery table %s", table_id)
         return False
 
     errors = bq_client.insert_rows_json(table_id, rows_to_insert)
     if errors:
-        print("Error inserting summary: ", errors)
+        logger.error("Error inserting summary: %s", errors)
         return False
-    else:
-        print("Sentiment grades inserted successfully.")
-        return True
+
+    logger.info("Sentiment grades inserted successfully.")
+    return True
+
 
 if __name__ == "__main__":
     start_date = "2025-09-03"
     end_date = "2025-09-09"
     reviews = get_reviews(start_date, end_date)
     print(f"Count of reviews: {len(reviews)}")
-    graded_data = generate_sentiment_grade(reviews,output_response=True)
+    graded_data = generate_sentiment_grade(reviews, output_response=True)
     print(graded_data)
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
-
     print(load_status)
-
-
-
-
-
-
-
-
-
