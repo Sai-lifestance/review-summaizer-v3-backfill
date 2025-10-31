@@ -104,7 +104,7 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
         return v if isinstance(v, str) else str(v)
 
     # extract review text safely, skip empties, trim each line to keep tokens sane
-    LINE_TRIM = 1000  # still trim overly long individual reviews
+    LINE_TRIM = 10000  # still trim overly long individual reviews
     review_texts_list = []
     skipped = 0
 
@@ -248,6 +248,7 @@ if __name__ == "__main__":
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
 
     print(load_status)
+
 
 
 
