@@ -2,7 +2,8 @@ import datetime
 import json
 import logging
 from collections import defaultdict
-
+from datetime import date, datetime
+from decimal import Decimal
 import pandas as pd
 
 from app.clients import openai_client, bq_client
@@ -12,7 +13,24 @@ from app.utils import load_review_categories, get_reviews
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-
+def _bq_json_sanitize(x):
+    """
+    Recursively convert Python types to JSON-serializable forms acceptable
+    for BigQuery insert_rows_json.
+    - date/datetime -> ISO string
+    - Decimal -> float (or str if you prefer STRING in BQ)
+    """
+    if isinstance(x, date) and not isinstance(x, datetime):
+        return x.isoformat()  # 'YYYY-MM-DD'
+    if isinstance(x, datetime):
+        return x.isoformat()  # 'YYYY-MM-DDTHH:MM:SS[.ffffff][+HH:MM]'
+    if isinstance(x, Decimal):
+        return float(x)
+    if isinstance(x, dict):
+        return {k: _bq_json_sanitize(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_bq_json_sanitize(v) for v in x]
+    return x
 def count_category_mentions(reviews, categories, text_key="review_comment"):
     """
     Counts how many reviews mention each category at least once based on its keyword list.
@@ -238,7 +256,8 @@ def load_sentiment_grades(start_date, end_date, graded_data):
         logger.warning("No valid rows to insert into BigQuery table %s", table_id)
         return False
 
-    errors = bq_client.insert_rows_json(table_id, rows_to_insert)
+    rows_safe = _bq_json_sanitize(rows_to_insert)
+    errors = bq_client.insert_rows_json(table_id, rows_safe)
     if errors:
         logger.error("Error inserting summary: %s", errors)
         return False
@@ -256,3 +275,4 @@ if __name__ == "__main__":
     print(graded_data)
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
     print(load_status)
+
