@@ -2,6 +2,8 @@ import json
 import logging
 import logging
 from flask import Request 
+from datetime import date, datetime, timedelta  # <-- add
+from collections import Counter                  # <-- add
 from app.utils import last_complete_fri_to_thu, get_reviews
 from app.summarizer import generate_summaries, load_summaries
 from app.sentiment_grader import generate_sentiment_grade, load_sentiment_grades
@@ -10,6 +12,15 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s"
 )
 logger = logging.getLogger("app")
+def _to_date(v):
+    if isinstance(v, date):
+        return v
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, str):
+        # supports 'YYYY-MM-DD' and ISO-like strings
+        return date.fromisoformat(v[:10])
+    return None
 
 def summarize_and_load(request: Request):
     """
@@ -26,6 +37,33 @@ def summarize_and_load(request: Request):
         reviews = get_reviews(start_date, end_date)
         review_length = len(reviews)
         logger.info("Fetched %d reviews", review_length)
+        # ── 7-day completeness check (abort if any day has zero) ─────────────────────
+        all_days = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
+        cnt = Counter()
+        skipped = 0
+
+        for r in reviews:
+            d = _to_date(r.get("date"))  # your table uses 'date' (YYYY-MM-DD)
+            if d is None:
+                skipped += 1
+                continue
+            if start_date <= d <= end_date:
+                cnt[d] += 1
+        if skipped:
+            logger.warning("Per-day count: skipped %d row(s) with missing/unparseable date", skipped)
+
+        logger.info("──── Daily review counts %s → %s ────", start_date, end_date)
+        zero_days = []
+        for d in all_days:
+            c = cnt.get(d, 0)
+            logger.info("  %s | %4d", d.isoformat(), c)
+        if c == 0:
+            zero_days.append(d)
+            logger.info("────────────────────────────────────────")
+        if zero_days:
+            z = ", ".join(d.isoformat() for d in zero_days)
+            raise RuntimeError(f"Reviews data incomplete: zero rows on {z}. Aborting run.")
+# ─────────────────────────────────────────────────────────────────────────────
 
         # Summarizer
         wins, opps = generate_summaries(reviews)
@@ -84,5 +122,6 @@ if __name__ == "__main__":
     print(f"Sentiment load status: {sentiment_status}")
 
     print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
 
