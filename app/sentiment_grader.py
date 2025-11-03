@@ -2,9 +2,10 @@ import datetime
 import json
 import logging
 from collections import defaultdict
-from datetime import date, datetime
+
 from decimal import Decimal
 import pandas as pd
+from datetime import date, datetime, timezone
 
 from app.clients import openai_client, bq_client
 from app.config import BQ_PROJECT_SUMMARIES, DEFAULT_MODEL, SENTIMENT_GRADE_TABLE
@@ -236,7 +237,7 @@ def load_sentiment_grades(start_date, end_date, graded_data):
     logger.info("Loading sentiment grades into %s...", table_id)
 
     rows_to_insert = []
-    iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    iso_now = datetime.now(timezone.utc).isoformat()
     for entry in graded_data or []:
         category = entry.get("category")
         if not category:
@@ -275,4 +276,5 @@ if __name__ == "__main__":
     print(graded_data)
     load_status = load_sentiment_grades(start_date, end_date, graded_data)
     print(load_status)
+
 
