@@ -29,10 +29,13 @@ def generate_summaries(reviews, model=DEFAULT_MODEL, output_response=False):
     prompt_wins = f"""
 Summarize the following reviews.
 Focus ONLY on wins: praise, highlights, positive themes.
-Include context on why the wins occurred based on the reviews.
+Include context on why the wins occurred based on the reviews. Don't add this as a separate line; just include in the bullet point.
 Please output only the TOP 3 most impactful in bullet point format.
 Make sure a new line character is included in between each bullet point item.
 Make sure the 3 bullet point items are in order of descending prominence.
+Be extremely consice in your summaries.
+Make sure to only base your summaries off the reviews, do not make anything up.
+Ensure each bullet point item spans only 2-3 lines.
 Reviews:
 {review_texts}
 """
@@ -48,10 +51,13 @@ Reviews:
     prompt_opps = f"""
 Summarize the following reviews.
 Focus ONLY on opportunities: complaints, concerns, and areas for improvement.
-Include context on why the complaints and concerns occurred based on the reviews.
+Include context on why the complaints and concerns occurred based on the reviews. Don't add this as a separate line; just include in the bullet point.
 Please output only the TOP 3 most impactful in bullet point format.
 Make sure a new line character is included in between each bullet point item.
 Make sure the 3 bullet point items are in order of descending prominence.
+Be extremely consice in your summaries.
+Make sure to only base your summaries off the reviews, do not make anything up.
+Ensure each bullet point item spans only 2-3 lines.
 Reviews:
 {review_texts}
 """
