@@ -44,9 +44,8 @@ def summarize_and_load(request: Request):
     """
     try:
         # 1) Window selection
-        #start_date, end_date = last_complete_fri_to_thu()
-        start_date = _to_date("2025-10-31")
-        end_date   = _to_date("2025-11-06")
+        start_date, end_date = last_complete_fri_to_thu()
+        
         # Ensure real date objects (avoid str - str TypeError)
         start_date = _to_date(start_date)
         end_date = _to_date(end_date)
@@ -190,4 +189,5 @@ if __name__ == "__main__":
     # print(f"Sentiment load status: {sentiment_status}")
 
     # print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
