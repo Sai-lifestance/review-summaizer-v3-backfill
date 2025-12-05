@@ -3,6 +3,7 @@ import logging
 from flask import Request
 from datetime import date, datetime, timedelta
 from collections import Counter
+import pandas as pd
 
 from app.utils import last_complete_fri_to_thu, get_reviews
 from app.summarizer import generate_summaries, load_summaries
@@ -193,6 +194,7 @@ if __name__ == "__main__":
     # print(f"Sentiment load status: {sentiment_status}")
 
     # print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
 
 
