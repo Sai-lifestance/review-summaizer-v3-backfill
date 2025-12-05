@@ -59,6 +59,9 @@ def summarize_and_load(request: Request):
         review_length = len(reviews)
         logger.info("Fetched %d reviews", review_length)
 
+        #convert into dataframe
+        reviews_df = pd.DataFrame(reviews)
+        
         # 3) 7-day completeness check (abort if any day has zero)
         all_days = [start_date + timedelta(days=i)
                     for i in range((end_date - start_date).days + 1)]
@@ -93,7 +96,7 @@ def summarize_and_load(request: Request):
             raise RuntimeError(f"Reviews data incomplete: zero rows on {z}. Aborting run.")
             
         print("\nRunning review category tagger...")
-        tagged_rows = tag_and_load_review_tags(reviews, start_date, end_date)
+        tagged_rows = tag_and_load_review_tags(reviews_df, start_date, end_date)
         print(f"Tagged + loaded {tagged_rows} review-category rows into BigQuery.")
 
         # 4) Summarizer
@@ -194,6 +197,7 @@ if __name__ == "__main__":
     # print(f"Sentiment load status: {sentiment_status}")
 
     # print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
 
 
