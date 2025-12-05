@@ -52,10 +52,7 @@ def summarize_and_load(request: Request):
         if not isinstance(start_date, date) or not isinstance(end_date, date):
             raise RuntimeError("Could not coerce start/end window to dates")
         logger.info("Processing reviews from %s to %s", start_date, end_date)
-        print("\nRunning review category tagger...")
-        tagged_rows = tag_and_load_review_tags(reviews, start_date, end_date)
-        print(f"Tagged + loaded {tagged_rows} review-category rows into BigQuery.")
-
+        
         # 2) Pull reviews for the window
         reviews = get_reviews(start_date, end_date)
         review_length = len(reviews)
@@ -93,6 +90,10 @@ def summarize_and_load(request: Request):
         if zero_days:
             z = ", ".join(day.isoformat() for day in zero_days)
             raise RuntimeError(f"Reviews data incomplete: zero rows on {z}. Aborting run.")
+            
+        print("\nRunning review category tagger...")
+        tagged_rows = tag_and_load_review_tags(reviews, start_date, end_date)
+        print(f"Tagged + loaded {tagged_rows} review-category rows into BigQuery.")
 
         # 4) Summarizer
         logger.info("Running summarizer for %d reviews...", review_length)
@@ -192,6 +193,7 @@ if __name__ == "__main__":
     # print(f"Sentiment load status: {sentiment_status}")
 
     # print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
 
 
