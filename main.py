@@ -7,7 +7,7 @@ from collections import Counter
 from app.utils import last_complete_fri_to_thu, get_reviews
 from app.summarizer import generate_summaries, load_summaries
 from app.sentiment_grader import generate_sentiment_grade, load_sentiment_grades
-
+from app.review_tagger import tag_and_load_review_tags
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -52,6 +52,9 @@ def summarize_and_load(request: Request):
         if not isinstance(start_date, date) or not isinstance(end_date, date):
             raise RuntimeError("Could not coerce start/end window to dates")
         logger.info("Processing reviews from %s to %s", start_date, end_date)
+        print("\nRunning review category tagger...")
+        tagged_rows = tag_and_load_review_tags(reviews, start_date, end_date)
+        print(f"Tagged + loaded {tagged_rows} review-category rows into BigQuery.")
 
         # 2) Pull reviews for the window
         reviews = get_reviews(start_date, end_date)
@@ -189,5 +192,6 @@ if __name__ == "__main__":
     # print(f"Sentiment load status: {sentiment_status}")
 
     # print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
 
