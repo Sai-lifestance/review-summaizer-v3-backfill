@@ -91,7 +91,7 @@ def load_review_tags_to_bq(
     tagged_df = tagged_df.copy()
     tagged_df["week_start"] = start_date
     tagged_df["week_end"] = end_date
-    tagged_df["load_ts_utc"] = datetime.now(timezone.utc)
+    tagged_df["_load_ts_utc"] = datetime.now(timezone.utc)
 
     table_id = f"{BQ_PROJECT_SUMMARIES}.{REVIEW_TAGS_TABLE}"
     logger.info("Loading %d tagged rows into %s ...", len(tagged_df), table_id)
