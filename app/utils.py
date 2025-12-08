@@ -26,6 +26,7 @@ def get_reviews(start_date, end_date):
     query = f"""
     SELECT
         date,
+        primary_key,   
         review_rating,
         review_comment
     FROM `{BQ_PROJECT_REVIEWS}.{REVIEWS_TABLE}`
@@ -65,3 +66,4 @@ def load_review_categories(file_path: str = None) -> dict:
     categories = dict(zip(df["category"], df["keywords"]))
     logger.info(f"Loaded {len(categories)} categories from {csv_path}")
     return categories
+
