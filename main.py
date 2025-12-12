@@ -61,6 +61,11 @@ def summarize_and_load(request: Request):
 
         #convert into dataframe
         reviews_df = pd.DataFrame(reviews)
+        VERSIONS = [
+            ("v1.0", "data/review_keywords_v1.csv"),
+            ("v2.0", "data/review_keywords_v2.csv"),
+         # add more later: ("v3.0", "data/review_keywords_v3.csv"),
+        ]
         
         # 3) 7-day completeness check (abort if any day has zero)
         all_days = [start_date + timedelta(days=i)
@@ -94,24 +99,45 @@ def summarize_and_load(request: Request):
         if zero_days:
             z = ", ".join(day.isoformat() for day in zero_days)
             raise RuntimeError(f"Reviews data incomplete: zero rows on {z}. Aborting run.")
-            
-        print("\nRunning review category tagger...")
-        tagged_rows = tag_and_load_review_tags(reviews_df, start_date, end_date)
-        print(f"Tagged + loaded {tagged_rows} review-category rows into BigQuery.")
 
         # 4) Summarizer
         logger.info("Running summarizer for %d reviews...", review_length)
         wins, opps = generate_summaries(reviews)
+        
+       sentiment_results = {}
 
-        # 5) Sentiment grader
-        logger.info("Running sentiment grader for the same review batch...")
-        graded_data = generate_sentiment_grade(reviews, output_response=True)
-        sentiment_ok = load_sentiment_grades(start_date, end_date, graded_data)
-        if sentiment_ok:
-            logger.info("Sentiment grades inserted successfully.")
-        else:
-            logger.warning("Sentiment grades failed to insert.")
-
+       for mapping_version, keywords_file in VERSIONS:
+              logger.info("Running tagger + sentiment for mapping_version=%s using %s", mapping_version, keywords_file)
+              print(f"\nRunning review category tagger ({mapping_version})...")
+              tagged_rows = tag_and_load_review_tags(
+                  reviews_df,
+                  start_date,
+                  end_date,
+                  keywords_file=keywords_file,
+                  mapping_version=mapping_version,
+              )
+                print(f"Tagged + loaded {tagged_rows} rows into BigQuery for {mapping_version}.")
+            
+                logger.info("Running sentiment grader (%s)...", mapping_version)
+                graded_data = generate_sentiment_grade(
+                    reviews,
+                    output_response=True,
+                    keywords_file=keywords_file,
+                )
+            
+                sentiment_ok = load_sentiment_grades(
+                    start_date,
+                    end_date,
+                    graded_data,
+                    mapping_version=mapping_version,
+                )
+            
+                sentiment_results[mapping_version] = "inserted" if sentiment_ok else "failed"
+                if sentiment_ok:
+                    logger.info("Sentiment grades inserted successfully for %s.", mapping_version)
+                else:
+                    logger.warning("Sentiment grades failed to insert for %s.", mapping_version)
+                         
         # 6) Store summaries
         logger.info("Loading summaries into BigQuery...")
         summary_ok = load_summaries(start_date, end_date, wins, opps, review_length)
@@ -127,7 +153,7 @@ def summarize_and_load(request: Request):
             "wins_summary": wins,
             "opps_summary": opps,
             "summary_status": "inserted" if summary_ok else "failed",
-            "sentiment_status": "inserted" if sentiment_ok else "failed",
+            "sentiment_status_by_version": sentiment_results,
         }
         return json.dumps(body), 200, {"Content-Type": "application/json"}
 
@@ -197,6 +223,7 @@ if __name__ == "__main__":
     # print(f"Sentiment load status: {sentiment_status}")
 
     # print("\n✅ Completed summarizer + sentiment grader flow.")
+
 
 
 
