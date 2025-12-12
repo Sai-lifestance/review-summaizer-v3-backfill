@@ -84,7 +84,7 @@ def count_category_mentions(reviews, categories, text_key="review_comment"):
     return dict(counts)
 
 
-def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False):
+def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False , keywords_file: str | None = None):
     # ── early guards ───────────────────────────────────────────
     total_reviews = len(reviews or [])
     logger.info("[sentiment] enter generate_sentiment_grade: reviews=%d", total_reviews)
@@ -94,7 +94,7 @@ def generate_sentiment_grade(reviews, model=DEFAULT_MODEL, output_response=False
 
     # ── load categories ────────────────────────────────────────
     try:
-        categories = load_review_categories()  # expects dict[str, list[str]]
+        categories = load_review_categories(keywords_file)  # expects dict[str, list[str]]
         total_kw = sum(len(v or []) for v in categories.values())
         empty_kw = sum(1 for v in categories.values() for k in (v or []) if not k)
         logger.info(
@@ -232,7 +232,7 @@ F = overwhelmingly negative
     return graded_data
 
 
-def load_sentiment_grades(start_date, end_date, graded_data):
+def load_sentiment_grades(start_date, end_date, graded_data , mapping_version: str):
     table_id = f"{BQ_PROJECT_SUMMARIES}.{SENTIMENT_GRADE_TABLE}"
     logger.info("Loading sentiment grades into %s...", table_id)
 
@@ -250,6 +250,7 @@ def load_sentiment_grades(start_date, end_date, graded_data):
                 "sentiment_grade": entry.get("grade"),
                 "count_of_mentions": entry.get("mentions", 0),
                 "insert_timestamp_utc": iso_now,
+                "mapping_version": mapping_version,
             }
         )
 
@@ -272,9 +273,10 @@ if __name__ == "__main__":
     end_date = "2025-09-09"
     reviews = get_reviews(start_date, end_date)
     print(f"Count of reviews: {len(reviews)}")
-    graded_data = generate_sentiment_grade(reviews, output_response=True)
+    graded_data = generate_sentiment_grade(reviews, output_response=True, keywords_file="data/review_keywords_v1.csv")
     print(graded_data)
-    load_status = load_sentiment_grades(start_date, end_date, graded_data)
+    load_status = load_sentiment_grades(start_date, end_date, graded_data, mapping_version="v1.0")
     print(load_status)
+
 
 

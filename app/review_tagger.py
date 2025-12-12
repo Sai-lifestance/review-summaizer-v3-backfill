@@ -13,11 +13,13 @@ logging.basicConfig(level=logging.INFO)
 
 
 def tag_reviews_dataframe(
-    reviews_df,
+    reviews_df: pd.DataFrame,
     categories: dict | None = None,
     text_key: str = "review_comment",
     pk_key: str = "primary_key",
     date_col: str = "date",
+    keywords_file: str | None = None,
+    mapping_version: str | None = None,
 ) -> pd.DataFrame:
     """
     Tag each review with zero or more categories based on keyword matches.
@@ -34,7 +36,7 @@ def tag_reviews_dataframe(
         reviews_df = pd.DataFrame(reviews_df)
 
     if categories is None:
-        categories = load_review_categories()
+        categories = load_review_categories(keywords_file)
 
     # Require text + date only
     required_cols = {text_key, date_col}
@@ -95,6 +97,7 @@ def tag_reviews_dataframe(
         len(reviews_df),
         len(tagged_df),
     )
+    tagged_df["mapping_version"] = mapping_version
 
     return tagged_df
 
@@ -134,9 +137,16 @@ def tag_and_load_review_tags(
     reviews_df,
     start_date: str,
     end_date: str,
+    keywords_file: str,
+    mapping_version: str,
 ) -> int:
     """
     Helper wrapper called from main.py
     """
-    tagged_df = tag_reviews_dataframe(reviews_df)
+    tagged_df = tag_reviews_dataframe(
+        reviews_df=reviews_df,
+        keywords_file=keywords_file,
+        mapping_version=mapping_version,
+    )
     return load_review_tags_to_bq(tagged_df, start_date, end_date)
+
