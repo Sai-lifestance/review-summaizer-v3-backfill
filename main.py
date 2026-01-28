@@ -68,7 +68,7 @@ def summarize_and_load(request: Request):
         VERSIONS = [
             ("v1.0", "data/review_keywords_v1.csv"),
             ("v2.0", "data/review_keywords_v2.csv"),
-            # ("v3.0", "data/review_keywords_v3.csv"),
+            ("v3.0", "data/review_keywords_v3.csv"),
         ]
 
         # 3) 7-day completeness check (abort if any day has zero)
@@ -203,6 +203,7 @@ if __name__ == "__main__":
     VERSIONS = [
         ("v1.0", "data/review_keywords_v1.csv"),
         ("v2.0", "data/review_keywords_v2.csv"),
+        ("v3.0", "data/review_keywords_v3.csv"),
     ]
 
     print("\nRunning summarizer...")
@@ -242,3 +243,4 @@ if __name__ == "__main__":
         print(f"Sentiment load status ({mapping_version}): {sentiment_status}")
 
     print("\n✅ Completed summarizer + versioned tagger + versioned sentiment flow.")
+
