@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from flask import Request
 from datetime import date, datetime, timedelta
 from collections import Counter
@@ -32,13 +33,54 @@ def _to_date(v):
     return None
 
 
+def _get_override_window(request: Request):
+    """
+    Optional override window for backfill.
+
+    Supports:
+      - Query params: ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+      - JSON body: {"start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD"}
+      - Env vars: START_DATE/END_DATE or BACKFILL_START/BACKFILL_END
+
+    Returns: (start_date: date|None, end_date: date|None)
+    """
+    # 1) request query params
+    try:
+        if request is not None and getattr(request, "args", None):
+            s = request.args.get("start_date")
+            e = request.args.get("end_date")
+            if s and e:
+                return _to_date(s), _to_date(e)
+    except Exception:
+        pass
+
+    # 2) request JSON body
+    try:
+        if request is not None:
+            payload = request.get_json(silent=True) or {}
+            s = payload.get("start_date")
+            e = payload.get("end_date")
+            if s and e:
+                return _to_date(s), _to_date(e)
+    except Exception:
+        pass
+
+    # 3) env vars (good for Cloud Run Jobs / local runs)
+    s = os.getenv("START_DATE") or os.getenv("BACKFILL_START")
+    e = os.getenv("END_DATE") or os.getenv("BACKFILL_END")
+    if s and e:
+        return _to_date(s), _to_date(e)
+
+    return None, None
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Cloud Function entrypoint
 # ──────────────────────────────────────────────────────────────────────────────
 def summarize_and_load(request: Request):
     """
     Cloud Function entrypoint:
-      - Gets last complete Fri–Thu range
+      - Gets last complete Fri–Thu range (unless overridden by backfill dates)
       - Fetches reviews
       - Validates last-week per-day completeness (abort if any day is zero)
       - Runs summarizer ONCE
@@ -46,14 +88,17 @@ def summarize_and_load(request: Request):
       - Inserts results into BigQuery
     """
     try:
-        # 1) Window selection
-        start_date, end_date = last_complete_fri_to_thu()
+        # 1) Window selection (default) OR override for backfill
+        start_date, end_date = _get_override_window(request)
+        if not (start_date and end_date):
+            start_date, end_date = last_complete_fri_to_thu()
 
         # Ensure real date objects (avoid str - str TypeError)
         start_date = _to_date(start_date)
         end_date = _to_date(end_date)
         if not isinstance(start_date, date) or not isinstance(end_date, date):
             raise RuntimeError("Could not coerce start/end window to dates")
+
         logger.info("Processing reviews from %s to %s", start_date, end_date)
 
         # 2) Pull reviews for the window
@@ -189,7 +234,12 @@ def summarize_and_load(request: Request):
 # ──────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     # Local test run (no HTTP)
-    start_date, end_date = "2025-10-31", "2025-11-06"
+    # You can override with env vars:
+    #   START_DATE=2025-10-31 END_DATE=2025-11-06 python main.py
+    start_date, end_date = _get_override_window(request=None)
+    if not (start_date and end_date):
+        start_date, end_date = "2025-10-31", "2025-11-06"
+
     start_date = _to_date(start_date)
     end_date = _to_date(end_date)
     print(f"Processing week: {start_date} → {end_date}")
@@ -243,4 +293,3 @@ if __name__ == "__main__":
         print(f"Sentiment load status ({mapping_version}): {sentiment_status}")
 
     print("\n✅ Completed summarizer + versioned tagger + versioned sentiment flow.")
-
